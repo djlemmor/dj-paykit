@@ -1,11 +1,41 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { defineDJPayKitWidget, DJPayKitWidget, DJPAYKIT_TAG_NAME } from '../../src';
+
+/**
+ * Creates the part of an HTTP response required by component tests.
+ */
+function createResponse(body: unknown, status = 200): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: vi.fn().mockResolvedValue(body),
+  } as unknown as Response;
+}
+
+/**
+ * Valid response reused by loading and retry tests.
+ */
+const paymentMethodsResponse = {
+  data: [
+    {
+      id: 'pm_01',
+      provider: 'gcash',
+      displayName: 'GCash',
+      accountName: 'DJ Store',
+      accountNumber: null,
+      qrImageUrl: '/api/djpaykit/payment-methods/pm_01/qr',
+      instructions: null,
+    },
+  ],
+};
 
 describe('DJPayKitWidget', () => {
   afterEach(() => {
     // Removes test elements so one test cannot affect another test.
     document.body.innerHTML = '';
+    // Restores fetch after API-related component tests.
+    vi.unstubAllGlobals();
   });
 
   it('registers the custom element', () => {
@@ -23,17 +53,31 @@ describe('DJPayKitWidget', () => {
   });
 
   it('renders an accessible loading state', () => {
-    // Creates the component exactly as a host website would.
+    /*
+     * Keeps fetch pending so we can inspect the loading interface before
+     * a server response arrives.
+     */
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>(() => {
+            // Intentionally left unresolved for this loading-state test.
+          }),
+      ),
+    );
+
     const widget = document.createElement(DJPAYKIT_TAG_NAME);
+
+    widget.setAttribute('api-url', '/api/djpaykit/payment-methods');
 
     document.body.append(widget);
 
-    // Reads content protected inside the component's Shadow DOM.
-    const shadowRoot = widget.shadowRoot;
-    const status = shadowRoot?.querySelector<HTMLElement>('[role="status"]');
+    const loading = widget.shadowRoot?.querySelector<HTMLElement>('[data-loading]');
 
-    expect(shadowRoot).not.toBeNull();
-    expect(status?.textContent).toContain('Loading payment methods');
+    expect(loading?.hidden).toBe(false);
+    expect(loading?.getAttribute('role')).toBe('status');
+    expect(loading?.textContent).toContain('Loading payment methods');
   });
 
   it('uses a section with an accessible title', () => {
@@ -95,5 +139,86 @@ describe('DJPayKitWidget', () => {
     const orderReference = widget.shadowRoot?.querySelector('[data-order-reference]');
 
     expect(orderReference?.textContent).toBe('ORDER-2002');
+  });
+
+  it('loads and displays available payment methods', async () => {
+    const readyListener = vi.fn();
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(createResponse(paymentMethodsResponse)));
+
+    const widget = document.createElement(DJPAYKIT_TAG_NAME);
+
+    widget.setAttribute('api-url', '/api/djpaykit/payment-methods');
+    widget.addEventListener('djpaykit:ready', readyListener);
+
+    document.body.append(widget);
+
+    await vi.waitFor(() => {
+      const providerList = widget.shadowRoot?.querySelector('[data-provider-list]');
+
+      expect(providerList?.textContent).toContain('GCash');
+      expect(providerList?.textContent).toContain('DJ Store');
+    });
+
+    // Confirms the documented ready event was dispatched.
+    expect(readyListener).toHaveBeenCalledOnce();
+  });
+
+  it('shows an empty state when no methods are enabled', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        createResponse({
+          data: [],
+        }),
+      ),
+    );
+
+    const widget = document.createElement(DJPAYKIT_TAG_NAME);
+
+    widget.setAttribute('api-url', '/api/djpaykit/payment-methods');
+
+    document.body.append(widget);
+
+    await vi.waitFor(() => {
+      const empty = widget.shadowRoot?.querySelector<HTMLElement>('[data-empty]');
+
+      expect(empty?.hidden).toBe(false);
+      expect(empty?.textContent).toContain('No payment methods are currently available');
+    });
+  });
+
+  it('allows a failed request to be retried', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(createResponse({}, 500))
+      .mockResolvedValueOnce(createResponse(paymentMethodsResponse));
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const widget = document.createElement(DJPAYKIT_TAG_NAME);
+
+    widget.setAttribute('api-url', '/api/djpaykit/payment-methods');
+
+    document.body.append(widget);
+
+    await vi.waitFor(() => {
+      const error = widget.shadowRoot?.querySelector('[data-error-message]');
+
+      expect(error?.textContent).toContain('HTTP 500');
+    });
+
+    const retryButton = widget.shadowRoot?.querySelector<HTMLButtonElement>('[data-retry]');
+
+    // Simulates the customer selecting the retry action.
+    retryButton?.click();
+
+    await vi.waitFor(() => {
+      const providerList = widget.shadowRoot?.querySelector('[data-provider-list]');
+
+      expect(providerList?.textContent).toContain('GCash');
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

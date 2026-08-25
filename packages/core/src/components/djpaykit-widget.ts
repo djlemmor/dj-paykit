@@ -1,24 +1,40 @@
+import { fetchPaymentMethods, PaymentMethodsApiError } from '../services/payment-methods-api';
+import type { PaymentMethod } from '../types/payment-method';
 import type { WidgetConfiguration } from '../types/widget-config';
 
 /**
- * HTML tag used to place the DJPayKit widget on a page.
+ * HTML tag used to place DJPayKit on a page.
  */
 export const DJPAYKIT_TAG_NAME = 'djpaykit-widget';
 
-/**
- * Currency used when the host website does not provide one.
- */
 const DEFAULT_CURRENCY = 'PHP';
+
+/**
+ * Represents the widget's current API state.
+ */
+type WidgetState = 'loading' | 'ready' | 'empty' | 'error';
 
 /**
  * Customer-facing DJPayKit Web Component.
  */
 export class DJPayKitWidget extends HTMLElement {
-  // The Shadow DOM prevents widget styles from affecting the host website.
+  // Isolates the widget's HTML and CSS from the host website.
   readonly #shadowRoot: ShadowRoot;
 
+  // Cancels a request when the URL changes or the widget is removed.
+  #requestController: AbortController | null = null;
+
+  // Stores payment methods loaded from the backend.
+  #paymentMethods: PaymentMethod[] = [];
+
+  // Tracks which interface state should be displayed.
+  #state: WidgetState = 'loading';
+
+  // Stores a safe, readable error for the customer.
+  #errorMessage = '';
+
   /**
-   * Tells the browser which HTML attributes should trigger an update.
+   * Attributes that cause the component to update.
    */
   static get observedAttributes(): string[] {
     return ['api-url', 'merchant-name', 'order-reference', 'amount', 'currency'];
@@ -27,36 +43,145 @@ export class DJPayKitWidget extends HTMLElement {
   constructor() {
     super();
 
-    // Creates the component's isolated DOM and style area.
     this.#shadowRoot = this.attachShadow({ mode: 'open' });
   }
 
   /**
-   * Runs when the widget is inserted into the page.
+   * Runs when the widget is inserted into a page.
    */
   connectedCallback(): void {
+    this.render();
+
+    // Starts loading enabled payment methods.
+    void this.loadPaymentMethods();
+  }
+
+  /**
+   * Cancels active requests when the widget leaves the page.
+   */
+  disconnectedCallback(): void {
+    this.cancelActiveRequest();
+  }
+
+  /**
+   * Responds when a watched HTML attribute changes.
+   */
+  attributeChangedCallback(
+    attributeName: string,
+    oldValue: string | null,
+    newValue: string | null,
+  ): void {
+    if (oldValue === newValue || !this.isConnected) {
+      return;
+    }
+
+    if (attributeName === 'api-url') {
+      // A new endpoint requires a fresh API request.
+      void this.loadPaymentMethods();
+
+      return;
+    }
+
+    // Payment-context changes only require a visual update.
     this.render();
   }
 
   /**
-   * Runs when one of the observed attributes changes.
+   * Retrieves payment methods and updates the widget state.
    */
-  attributeChangedCallback(
-    _attributeName: string,
-    oldValue: string | null,
-    newValue: string | null,
-  ): void {
-    /*
-     * Avoids unnecessary rendering when the value did not actually change.
-     * isConnected prevents rendering before the component enters the page.
-     */
-    if (oldValue !== newValue && this.isConnected) {
+  private async loadPaymentMethods(): Promise<void> {
+    const configuration = this.getConfiguration();
+
+    // Prevents an old request from changing the latest widget state.
+    this.cancelActiveRequest();
+
+    this.#paymentMethods = [];
+    this.#errorMessage = '';
+
+    if (!configuration.apiUrl) {
+      this.#state = 'error';
+      this.#errorMessage =
+        'Payment methods cannot be loaded because the api-url attribute is missing.';
       this.render();
+
+      return;
+    }
+
+    this.#state = 'loading';
+    this.render();
+
+    const controller = new AbortController();
+
+    this.#requestController = controller;
+
+    try {
+      const paymentMethods = await fetchPaymentMethods(configuration.apiUrl, controller.signal);
+
+      /*
+       * Ignores the response if another request replaced this one while
+       * it was still loading.
+       */
+      if (this.#requestController !== controller) {
+        return;
+      }
+
+      this.#paymentMethods = paymentMethods;
+      this.#state = paymentMethods.length > 0 ? 'ready' : 'empty';
+
+      this.render();
+      this.dispatchReadyEvent();
+    } catch (error: unknown) {
+      // AbortError is expected when an outdated request is cancelled.
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
+
+      if (this.#requestController !== controller) {
+        return;
+      }
+
+      this.#state = 'error';
+      this.#errorMessage =
+        error instanceof PaymentMethodsApiError
+          ? error.message
+          : 'Unable to load payment methods. Please try again.';
+
+      this.render();
+    } finally {
+      // Only clear the controller if this is still the latest request.
+      if (this.#requestController === controller) {
+        this.#requestController = null;
+      }
     }
   }
 
   /**
-   * Reads and validates the component's HTML attributes.
+   * Cancels the currently active API request.
+   */
+  private cancelActiveRequest(): void {
+    this.#requestController?.abort();
+    this.#requestController = null;
+  }
+
+  /**
+   * Announces that the widget finished loading.
+   */
+  private dispatchReadyEvent(): void {
+    this.dispatchEvent(
+      new CustomEvent('djpaykit:ready', {
+        bubbles: true,
+        composed: true,
+
+        // Only non-sensitive information is included in the event.
+        detail: {
+          paymentMethodCount: this.#paymentMethods.length,
+        },
+      }),
+    );
+  }
+
+  /**
+   * Reads and validates the component's attributes.
    */
   private getConfiguration(): WidgetConfiguration {
     return {
@@ -69,7 +194,7 @@ export class DJPayKitWidget extends HTMLElement {
   }
 
   /**
-   * Reads an attribute and converts empty text to null.
+   * Reads an attribute and treats empty values as null.
    */
   private readTextAttribute(attributeName: string): string | null {
     const value = this.getAttribute(attributeName)?.trim();
@@ -78,7 +203,7 @@ export class DJPayKitWidget extends HTMLElement {
   }
 
   /**
-   * Converts the amount attribute into a safe non-negative number.
+   * Converts the amount attribute into a valid non-negative number.
    */
   private readAmount(): number | null {
     const rawAmount = this.getAttribute('amount')?.trim();
@@ -89,7 +214,6 @@ export class DJPayKitWidget extends HTMLElement {
 
     const amount = Number(rawAmount);
 
-    // Money cannot be NaN, infinite, or negative.
     if (!Number.isFinite(amount) || amount < 0) {
       return null;
     }
@@ -103,7 +227,6 @@ export class DJPayKitWidget extends HTMLElement {
   private readCurrency(): string {
     const currency = this.getAttribute('currency')?.trim().toUpperCase();
 
-    // Accepts currency-shaped codes such as PHP, USD, or EUR.
     if (!currency || !/^[A-Z]{3}$/.test(currency)) {
       return DEFAULT_CURRENCY;
     }
@@ -112,7 +235,7 @@ export class DJPayKitWidget extends HTMLElement {
   }
 
   /**
-   * Formats a number using Philippine locale conventions.
+   * Formats money using Philippine locale conventions.
    */
   private formatAmount(amount: number, currency: string): string {
     try {
@@ -123,10 +246,6 @@ export class DJPayKitWidget extends HTMLElement {
         maximumFractionDigits: 2,
       }).format(amount);
     } catch {
-      /*
-       * Falls back to PHP if a browser does not recognize the supplied
-       * currency code.
-       */
       return new Intl.NumberFormat('en-PH', {
         style: 'currency',
         currency: DEFAULT_CURRENCY,
@@ -137,14 +256,14 @@ export class DJPayKitWidget extends HTMLElement {
   }
 
   /**
-   * Renders the current payment context and loading state.
+   * Renders the component's structure and current state.
    */
   private render(): void {
     const configuration = this.getConfiguration();
 
     /*
-     * Only package-controlled markup is assigned through innerHTML.
-     * Merchant and order values are inserted separately using textContent.
+     * Only package-controlled markup is inserted through innerHTML.
+     * API and attribute values are inserted separately with textContent.
      */
     this.#shadowRoot.innerHTML = `
       <style>
@@ -209,10 +328,40 @@ export class DJPayKitWidget extends HTMLElement {
           text-align: right;
         }
 
-        .status {
-          margin: 16px 0 0;
-          color: #4b5563;
+        .state {
+          margin-top: 16px;
           line-height: 1.5;
+        }
+
+        .message {
+          margin: 0;
+          color: #4b5563;
+        }
+
+        .error-message {
+          color: #b91c1c;
+        }
+
+        .retry-button {
+          margin-top: 12px;
+          padding: 8px 14px;
+          border: 0;
+          border-radius: 6px;
+          background: var(--djpaykit-primary-color, #2563eb);
+          color: #ffffff;
+          font: inherit;
+          font-weight: 600;
+          cursor: pointer;
+        }
+
+        .retry-button:focus-visible {
+          outline: 3px solid #93c5fd;
+          outline-offset: 2px;
+        }
+
+        .provider-list {
+          margin: 12px 0 0;
+          padding-left: 24px;
         }
       </style>
 
@@ -231,45 +380,136 @@ export class DJPayKitWidget extends HTMLElement {
           </p>
         </div>
 
-        <!-- Screen readers announce the current loading status. -->
-        <p class="status" role="status">Loading payment methods…</p>
+        <div class="state" aria-live="polite">
+          <p class="message" data-loading role="status" hidden>
+            Loading payment methods…
+          </p>
+
+          <p class="message" data-empty role="status" hidden>
+            No payment methods are currently available.
+          </p>
+
+          <div data-error hidden>
+            <p class="message error-message" data-error-message role="alert"></p>
+            <button class="retry-button" data-retry type="button">
+              Try again
+            </button>
+          </div>
+
+          <div data-ready hidden>
+            <p class="message" data-summary role="status"></p>
+            <ul class="provider-list" data-provider-list></ul>
+          </div>
+        </div>
       </section>
     `;
 
+    this.renderPaymentContext(configuration);
+    this.renderApiState();
+  }
+
+  /**
+   * Displays the merchant, order reference, and amount.
+   */
+  private renderPaymentContext(configuration: WidgetConfiguration): void {
     const title = this.#shadowRoot.querySelector<HTMLElement>('.title');
     const context = this.#shadowRoot.querySelector<HTMLElement>('[data-context]');
 
     if (configuration.merchantName && title) {
-      // textContent safely escapes merchant-provided text.
       title.textContent = configuration.merchantName;
     }
 
     if (configuration.orderReference) {
-      const orderRow = this.#shadowRoot.querySelector<HTMLElement>('[data-order-row]');
-      const orderReference = this.#shadowRoot.querySelector<HTMLElement>('[data-order-reference]');
+      const row = this.#shadowRoot.querySelector<HTMLElement>('[data-order-row]');
+      const value = this.#shadowRoot.querySelector<HTMLElement>('[data-order-reference]');
 
-      if (context && orderRow && orderReference) {
+      if (context && row && value) {
         context.hidden = false;
-        orderRow.hidden = false;
-        orderReference.textContent = configuration.orderReference;
+        row.hidden = false;
+        value.textContent = configuration.orderReference;
       }
     }
 
     if (configuration.amount !== null) {
-      const amountRow = this.#shadowRoot.querySelector<HTMLElement>('[data-amount-row]');
-      const amount = this.#shadowRoot.querySelector<HTMLElement>('[data-amount]');
+      const row = this.#shadowRoot.querySelector<HTMLElement>('[data-amount-row]');
+      const value = this.#shadowRoot.querySelector<HTMLElement>('[data-amount]');
 
-      if (context && amountRow && amount) {
+      if (context && row && value) {
         context.hidden = false;
-        amountRow.hidden = false;
-        amount.textContent = this.formatAmount(configuration.amount, configuration.currency);
+        row.hidden = false;
+        value.textContent = this.formatAmount(configuration.amount, configuration.currency);
       }
+    }
+  }
+
+  /**
+   * Displays loading, empty, error, or ready content.
+   */
+  private renderApiState(): void {
+    if (this.#state === 'loading') {
+      const loading = this.#shadowRoot.querySelector<HTMLElement>('[data-loading]');
+
+      if (loading) {
+        loading.hidden = false;
+      }
+
+      return;
+    }
+
+    if (this.#state === 'empty') {
+      const empty = this.#shadowRoot.querySelector<HTMLElement>('[data-empty]');
+
+      if (empty) {
+        empty.hidden = false;
+      }
+
+      return;
+    }
+
+    if (this.#state === 'error') {
+      const error = this.#shadowRoot.querySelector<HTMLElement>('[data-error]');
+      const message = this.#shadowRoot.querySelector<HTMLElement>('[data-error-message]');
+      const retry = this.#shadowRoot.querySelector<HTMLButtonElement>('[data-retry]');
+
+      if (error && message) {
+        error.hidden = false;
+        message.textContent = this.#errorMessage;
+      }
+
+      // Retry starts the same safe loading process again.
+      retry?.addEventListener('click', () => {
+        void this.loadPaymentMethods();
+      });
+
+      return;
+    }
+
+    const ready = this.#shadowRoot.querySelector<HTMLElement>('[data-ready]');
+    const summary = this.#shadowRoot.querySelector<HTMLElement>('[data-summary]');
+    const list = this.#shadowRoot.querySelector<HTMLUListElement>('[data-provider-list]');
+
+    if (!ready || !summary || !list) {
+      return;
+    }
+
+    ready.hidden = false;
+
+    const count = this.#paymentMethods.length;
+
+    summary.textContent = `${count} payment ${count === 1 ? 'method' : 'methods'} available.`;
+
+    for (const paymentMethod of this.#paymentMethods) {
+      const item = document.createElement('li');
+
+      // textContent prevents provider and account names from becoming HTML.
+      item.textContent = `${paymentMethod.displayName} — ${paymentMethod.accountName}`;
+      list.append(item);
     }
   }
 }
 
 /**
- * Registers the component if it has not already been registered.
+ * Registers the Web Component once.
  */
 export function defineDJPayKitWidget(): void {
   if (!customElements.get(DJPAYKIT_TAG_NAME)) {
