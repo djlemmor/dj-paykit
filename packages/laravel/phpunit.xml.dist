@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/11.5/phpunit.xsd"
+    bootstrap="vendor/autoload.php"
+    colors="true"
+    cacheDirectory=".phpunit.cache"
+>
+    <testsuites>
+        <!-- Runs every package test inside the tests directory. -->
+        <testsuite name="DJPayKit Laravel">
+            <directory>tests</directory>
+        </testsuite>
+    </testsuites>
+
+    <source>
+        <!-- Limits code-coverage analysis to package source files. -->
+        <include>
+            <directory suffix=".php">src</directory>
+        </include>
+    </source>
+
+    <php>
+        <!-- Provides an isolated in-memory database for later tests. -->
+        <env name="APP_ENV" value="testing"/>
+        <env name="DB_CONNECTION" value="sqlite"/>
+        <env name="DB_DATABASE" value=":memory:"/>
+        <env name="CACHE_STORE" value="array"/>
+        <env name="SESSION_DRIVER" value="array"/>
+    </php>
+</phpunit>

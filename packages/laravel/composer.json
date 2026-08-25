@@ -1,0 +1,49 @@
+{
+  "name": "djlemmor/djpaykit-laravel",
+  "description": "Laravel backend adapter for the DJPayKit QR payment widget.",
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "DJ Lemmor Nuique"
+    }
+  ],
+  "require": {
+    "php": "^8.2",
+    "illuminate/database": "^12.0",
+    "illuminate/filesystem": "^12.0",
+    "illuminate/http": "^12.0",
+    "illuminate/routing": "^12.0",
+    "illuminate/support": "^12.0",
+    "illuminate/validation": "^12.0"
+  },
+  "require-dev": {
+    "orchestra/testbench": "^10.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "DJLemmor\\DJPayKitLaravel\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "DJLemmor\\DJPayKitLaravel\\Tests\\": "tests/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "DJLemmor\\DJPayKitLaravel\\DJPayKitServiceProvider"
+      ]
+    }
+  },
+  "scripts": {
+    "test": "@php vendor/bin/phpunit",
+    "test:coverage": "@php vendor/bin/phpunit --coverage-text"
+  },
+  "config": {
+    "sort-packages": true
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}
