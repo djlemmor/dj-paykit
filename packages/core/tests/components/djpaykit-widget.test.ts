@@ -154,7 +154,7 @@ describe('DJPayKitWidget', () => {
     document.body.append(widget);
 
     await vi.waitFor(() => {
-      const providerList = widget.shadowRoot?.querySelector('[data-provider-list]');
+      const providerList = widget.shadowRoot?.querySelector('[data-payment-details]');
 
       expect(providerList?.textContent).toContain('GCash');
       expect(providerList?.textContent).toContain('DJ Store');
@@ -214,11 +214,69 @@ describe('DJPayKitWidget', () => {
     retryButton?.click();
 
     await vi.waitFor(() => {
-      const providerList = widget.shadowRoot?.querySelector('[data-provider-list]');
+      const providerList = widget.shadowRoot?.querySelector('[data-payment-details]');
 
       expect(providerList?.textContent).toContain('GCash');
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('switches the selected provider without reloading the page', async () => {
+    const providerSelectedListener = vi.fn();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        createResponse({
+          data: [
+            paymentMethodsResponse.data[0],
+            {
+              id: 'pm_02',
+              provider: 'maya',
+              displayName: 'Maya',
+              accountName: 'DJ Business',
+              accountNumber: '0912 345 6789',
+              qrImageUrl: '/api/djpaykit/payment-methods/pm_02/qr',
+              instructions: 'Enter your order number in the note.',
+            },
+          ],
+        }),
+      ),
+    );
+
+    const widget = document.createElement(DJPAYKIT_TAG_NAME);
+
+    widget.setAttribute('api-url', '/api/djpaykit/payment-methods');
+
+    widget.addEventListener('djpaykit:provider-selected', providerSelectedListener);
+
+    document.body.append(widget);
+
+    await vi.waitFor(() => {
+      const buttons = widget.shadowRoot?.querySelectorAll('[data-payment-method-id]');
+
+      expect(buttons?.length).toBe(2);
+    });
+
+    const mayaButton = widget.shadowRoot?.querySelector<HTMLButtonElement>(
+      '[data-payment-method-id="pm_02"]',
+    );
+
+    mayaButton?.click();
+
+    await vi.waitFor(() => {
+      const selectedProvider = widget.shadowRoot?.querySelector('[data-selected-provider]');
+      const accountName = widget.shadowRoot?.querySelector('[data-account-name]');
+      const accountNumber = widget.shadowRoot?.querySelector('[data-account-number]');
+      const qrImage = widget.shadowRoot?.querySelector<HTMLImageElement>('[data-qr-image]');
+
+      expect(selectedProvider?.textContent).toBe('Maya');
+      expect(accountName?.textContent).toBe('DJ Business');
+      expect(accountNumber?.textContent).toBe('0912 345 6789');
+      expect(qrImage?.getAttribute('src')).toBe('/api/djpaykit/payment-methods/pm_02/qr');
+    });
+
+    expect(providerSelectedListener).toHaveBeenCalledOnce();
   });
 });

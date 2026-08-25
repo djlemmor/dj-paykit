@@ -1,6 +1,7 @@
 import { fetchPaymentMethods, PaymentMethodsApiError } from '../services/payment-methods-api';
 import type { PaymentMethod } from '../types/payment-method';
 import type { WidgetConfiguration } from '../types/widget-config';
+import { renderPaymentMethodView } from './payment-method-view';
 
 /**
  * HTML tag used to place DJPayKit on a page.
@@ -26,6 +27,9 @@ export class DJPayKitWidget extends HTMLElement {
 
   // Stores payment methods loaded from the backend.
   #paymentMethods: PaymentMethod[] = [];
+
+  // Stores the provider currently selected by the customer.
+  #selectedPaymentMethodId: string | null = null;
 
   // Tracks which interface state should be displayed.
   #state: WidgetState = 'loading';
@@ -96,6 +100,7 @@ export class DJPayKitWidget extends HTMLElement {
     this.cancelActiveRequest();
 
     this.#paymentMethods = [];
+    this.#selectedPaymentMethodId = null;
     this.#errorMessage = '';
 
     if (!configuration.apiUrl) {
@@ -126,6 +131,12 @@ export class DJPayKitWidget extends HTMLElement {
       }
 
       this.#paymentMethods = paymentMethods;
+
+      /*
+       * Automatically selects the first enabled payment method.
+       */
+      this.#selectedPaymentMethodId = paymentMethods[0]?.id ?? null;
+
       this.#state = paymentMethods.length > 0 ? 'ready' : 'empty';
 
       this.render();
@@ -175,6 +186,24 @@ export class DJPayKitWidget extends HTMLElement {
         // Only non-sensitive information is included in the event.
         detail: {
           paymentMethodCount: this.#paymentMethods.length,
+        },
+      }),
+    );
+  }
+
+  /**
+   * Notifies the host website when the customer selects a provider.
+   */
+  private dispatchProviderSelectedEvent(paymentMethod: PaymentMethod): void {
+    this.dispatchEvent(
+      new CustomEvent('djpaykit:provider-selected', {
+        bubbles: true,
+        composed: true,
+
+        // Only public identifiers are exposed.
+        detail: {
+          paymentMethodId: paymentMethod.id,
+          provider: paymentMethod.provider,
         },
       }),
     );
@@ -359,10 +388,111 @@ export class DJPayKitWidget extends HTMLElement {
           outline-offset: 2px;
         }
 
-        .provider-list {
-          margin: 12px 0 0;
-          padding-left: 24px;
-        }
+        .provider-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.provider-button {
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.provider-button:hover {
+  border-color: var(--djpaykit-primary-color, #2563eb);
+}
+
+.provider-button[aria-pressed="true"] {
+  border-color: var(--djpaykit-primary-color, #2563eb);
+  background: var(--djpaykit-primary-color, #2563eb);
+  color: #ffffff;
+}
+
+.provider-button:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.payment-details {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.provider-title {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.detail-row + .detail-row {
+  margin-top: 8px;
+}
+
+.detail-label {
+  color: #4b5563;
+}
+
+.detail-value {
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.qr-container {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.qr-image {
+  display: block;
+  width: 100%;
+  max-width: 280px;
+  height: auto;
+  margin: 0 auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.instructions {
+  margin: 16px 0 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  white-space: pre-wrap;
+}
+
+.verification-notice {
+  margin: 16px 0 0;
+  padding: 12px;
+  border-left: 4px solid #f59e0b;
+  background: #fffbeb;
+  color: #78350f;
+}
+
+@media (max-width: 360px) {
+  .widget {
+    padding: 16px;
+  }
+
+  .provider-selector {
+    grid-template-columns: 1fr;
+  }
+}}
       </style>
 
       <section class="widget" aria-labelledby="djpaykit-title">
@@ -397,9 +527,60 @@ export class DJPayKitWidget extends HTMLElement {
           </div>
 
           <div data-ready hidden>
-            <p class="message" data-summary role="status"></p>
-            <ul class="provider-list" data-provider-list></ul>
-          </div>
+  <p class="message" data-summary role="status"></p>
+
+  <!-- Native buttons provide keyboard selection automatically. -->
+  <div
+    class="provider-selector"
+    data-provider-selector
+    role="group"
+    aria-label="Choose a payment method"
+  ></div>
+
+  <section
+    class="payment-details"
+    data-payment-details
+    aria-labelledby="djpaykit-selected-provider"
+  >
+    <h3
+      id="djpaykit-selected-provider"
+      class="provider-title"
+      data-selected-provider
+    ></h3>
+
+    <p class="detail-row">
+      <span class="detail-label">Account name</span>
+      <strong class="detail-value" data-account-name></strong>
+    </p>
+
+    <p class="detail-row" data-account-number-row hidden>
+      <span class="detail-label">Account number</span>
+      <strong class="detail-value" data-account-number></strong>
+    </p>
+
+    <div class="qr-container">
+      <img class="qr-image" data-qr-image />
+
+      <p
+        class="message error-message"
+        data-qr-error
+        role="alert"
+        hidden
+      >
+        The QR image could not be displayed.
+      </p>
+    </div>
+
+    <div class="instructions" data-instructions-row hidden>
+      <strong>Payment instructions</strong>
+      <p data-instructions></p>
+    </div>
+
+    <p class="verification-notice">
+      Payment remains pending until it is manually reviewed.
+    </p>
+  </section>
+</div>
         </div>
       </section>
     `;
@@ -486,9 +667,8 @@ export class DJPayKitWidget extends HTMLElement {
 
     const ready = this.#shadowRoot.querySelector<HTMLElement>('[data-ready]');
     const summary = this.#shadowRoot.querySelector<HTMLElement>('[data-summary]');
-    const list = this.#shadowRoot.querySelector<HTMLUListElement>('[data-provider-list]');
 
-    if (!ready || !summary || !list) {
+    if (!ready || !summary) {
       return;
     }
 
@@ -498,13 +678,24 @@ export class DJPayKitWidget extends HTMLElement {
 
     summary.textContent = `${count} payment ${count === 1 ? 'method' : 'methods'} available.`;
 
-    for (const paymentMethod of this.#paymentMethods) {
-      const item = document.createElement('li');
+    /*
+     * Renders provider buttons and the selected provider's details.
+     */
+    renderPaymentMethodView({
+      root: this.#shadowRoot,
+      paymentMethods: this.#paymentMethods,
+      selectedPaymentMethodId: this.#selectedPaymentMethodId,
 
-      // textContent prevents provider and account names from becoming HTML.
-      item.textContent = `${paymentMethod.displayName} — ${paymentMethod.accountName}`;
-      list.append(item);
-    }
+      onProviderSelected: (paymentMethod) => {
+        this.#selectedPaymentMethodId = paymentMethod.id;
+
+        // Renders the newly selected provider.
+        this.render();
+
+        // Notifies the host checkout about the customer's choice.
+        this.dispatchProviderSelectedEvent(paymentMethod);
+      },
+    });
   }
 }
 
