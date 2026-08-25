@@ -32,9 +32,13 @@ const paymentMethodsResponse = {
 
 describe('DJPayKitWidget', () => {
   afterEach(() => {
-    // Removes test elements so one test cannot affect another test.
+    // Removes test elements so tests cannot affect one another.
     document.body.innerHTML = '';
-    // Restores fetch after API-related component tests.
+
+    // Restores mocked methods such as the anchor's click method.
+    vi.restoreAllMocks();
+
+    // Restores fetch, URL, navigator, and other stubbed globals.
     vi.unstubAllGlobals();
   });
 
@@ -153,11 +157,16 @@ describe('DJPayKitWidget', () => {
 
     document.body.append(widget);
 
+    /*
+     * Waits until the API response has been processed and the ready state
+     * is displayed. At this point, the download listener is attached.
+     */
     await vi.waitFor(() => {
-      const providerList = widget.shadowRoot?.querySelector('[data-payment-details]');
+      const readyState = widget.shadowRoot?.querySelector<HTMLElement>('[data-ready]');
+      const selectedProvider = widget.shadowRoot?.querySelector('[data-selected-provider]');
 
-      expect(providerList?.textContent).toContain('GCash');
-      expect(providerList?.textContent).toContain('DJ Store');
+      expect(readyState?.hidden).toBe(false);
+      expect(selectedProvider?.textContent).toBe('GCash');
     });
 
     // Confirms the documented ready event was dispatched.
@@ -278,5 +287,130 @@ describe('DJPayKitWidget', () => {
     });
 
     expect(providerSelectedListener).toHaveBeenCalledOnce();
+  });
+
+  it('copies the selected account number', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        writeText,
+      },
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        createResponse({
+          data: [
+            {
+              ...paymentMethodsResponse.data[0],
+              accountNumber: '0912 345 6789',
+            },
+          ],
+        }),
+      ),
+    );
+
+    const widget = document.createElement(DJPAYKIT_TAG_NAME);
+
+    widget.setAttribute('api-url', '/api/djpaykit/payment-methods');
+
+    document.body.append(widget);
+
+    await vi.waitFor(() => {
+      const copyButton = widget.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-copy-account-number]',
+      );
+
+      expect(copyButton?.hidden).toBe(false);
+    });
+
+    const copyButton = widget.shadowRoot?.querySelector<HTMLButtonElement>(
+      '[data-copy-account-number]',
+    );
+
+    copyButton?.click();
+
+    await vi.waitFor(() => {
+      const feedback = widget.shadowRoot?.querySelector('[data-action-feedback]');
+
+      expect(feedback?.textContent).toBe('Copied');
+    });
+
+    expect(writeText).toHaveBeenCalledWith('0912 345 6789');
+  });
+
+  it('dispatches an event after downloading a QR image', async () => {
+    const downloadedListener = vi.fn();
+
+    /*
+     * The first response loads payment methods.
+     * The second response downloads the selected QR image.
+     */
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(createResponse(paymentMethodsResponse))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        blob: vi.fn().mockResolvedValue(
+          new Blob(['qr-image'], {
+            type: 'image/png',
+          }),
+        ),
+      } as unknown as Response);
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn().mockReturnValue('blob:qr-image'),
+      revokeObjectURL: vi.fn(),
+    });
+
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {
+      // Prevents jsdom from attempting browser navigation.
+    });
+
+    const widget = document.createElement(DJPAYKIT_TAG_NAME);
+
+    widget.setAttribute('api-url', '/api/djpaykit/payment-methods');
+
+    widget.addEventListener('djpaykit:qr-downloaded', downloadedListener);
+
+    document.body.append(widget);
+
+    /*
+     * Waits for the payment method to finish loading.
+     * The download event listener is attached during this ready render.
+     */
+    await vi.waitFor(() => {
+      const readyState = widget.shadowRoot?.querySelector<HTMLElement>('[data-ready]');
+      const selectedProvider = widget.shadowRoot?.querySelector('[data-selected-provider]');
+
+      expect(readyState?.hidden).toBe(false);
+      expect(selectedProvider?.textContent).toBe('GCash');
+    });
+
+    const downloadButton =
+      widget.shadowRoot?.querySelector<HTMLButtonElement>('[data-download-qr]');
+
+    expect(downloadButton).not.toBeNull();
+
+    // Starts the simulated QR download.
+    downloadButton?.click();
+
+    /*
+     * Waiting for the feedback provides a clearer failure if the download
+     * utility encounters an error.
+     */
+    await vi.waitFor(() => {
+      const feedback = widget.shadowRoot?.querySelector('[data-action-feedback]');
+
+      expect(feedback?.textContent).toBe('QR downloaded');
+    });
+
+    expect(downloadedListener).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

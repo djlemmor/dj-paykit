@@ -210,6 +210,24 @@ export class DJPayKitWidget extends HTMLElement {
   }
 
   /**
+   * Notifies the host website after a QR image is downloaded.
+   */
+  private dispatchQrDownloadedEvent(paymentMethod: PaymentMethod): void {
+    this.dispatchEvent(
+      new CustomEvent('djpaykit:qr-downloaded', {
+        bubbles: true,
+        composed: true,
+
+        // Does not expose account numbers or internal paths.
+        detail: {
+          paymentMethodId: paymentMethod.id,
+          provider: paymentMethod.provider,
+        },
+      }),
+    );
+  }
+
+  /**
    * Reads and validates the component's attributes.
    */
   private getConfiguration(): WidgetConfiguration {
@@ -492,7 +510,50 @@ export class DJPayKitWidget extends HTMLElement {
   .provider-selector {
     grid-template-columns: 1fr;
   }
-}}
+}
+  .payment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.action-button {
+  flex: 1 1 160px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.action-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.action-button:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.primary-action {
+  border: 1px solid var(--djpaykit-primary-color, #2563eb);
+  background: var(--djpaykit-primary-color, #2563eb);
+  color: #ffffff;
+}
+
+.secondary-action {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #111827;
+}
+
+.action-feedback {
+  margin: 10px 0 0;
+  color: #166534;
+  font-weight: 600;
+}
       </style>
 
       <section class="widget" aria-labelledby="djpaykit-title">
@@ -570,6 +631,35 @@ export class DJPayKitWidget extends HTMLElement {
         The QR image could not be displayed.
       </p>
     </div>
+
+    <div class="payment-actions">
+  <button
+    class="action-button secondary-action"
+    data-copy-account-number
+    type="button"
+    aria-describedby="djpaykit-action-feedback"
+    hidden
+  >
+    Copy account number
+  </button>
+
+  <button
+    class="action-button primary-action"
+    data-download-qr
+    type="button"
+    aria-describedby="djpaykit-action-feedback"
+  >
+    Download QR
+  </button>
+</div>
+
+<p
+  id="djpaykit-action-feedback"
+  class="action-feedback"
+  data-action-feedback
+  aria-live="polite"
+  hidden
+></p>
 
     <div class="instructions" data-instructions-row hidden>
       <strong>Payment instructions</strong>
@@ -694,6 +784,10 @@ export class DJPayKitWidget extends HTMLElement {
 
         // Notifies the host checkout about the customer's choice.
         this.dispatchProviderSelectedEvent(paymentMethod);
+      },
+
+      onQrDownloaded: (paymentMethod) => {
+        this.dispatchQrDownloadedEvent(paymentMethod);
       },
     });
   }
