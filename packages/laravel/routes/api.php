@@ -59,6 +59,26 @@ Route::prefix($prefix)->group(
                 )->name(
                     'djpaykit.admin.payment-methods.store',
                 );
+                
+                Route::patch(
+                    'admin/payment-methods/{paymentMethod}',
+                    [
+                        AdminPaymentMethodController::class,
+                        'update',
+                    ],
+                )->name(
+                    'djpaykit.admin.payment-methods.update',
+                );
+
+                Route::delete(
+                    'admin/payment-methods/{paymentMethod}',
+                    [
+                        AdminPaymentMethodController::class,
+                        'destroy',
+                    ],
+                )->name(
+                    'djpaykit.admin.payment-methods.destroy',
+                );
             },
         );
     },
