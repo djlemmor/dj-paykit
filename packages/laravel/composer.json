@@ -1,6 +1,20 @@
 {
   "name": "djlemmor/djpaykit-laravel",
   "description": "Laravel backend adapter for the DJPayKit QR payment widget.",
+  "keywords": [
+    "laravel",
+    "payments",
+    "qr-code",
+    "gcash",
+    "maya",
+    "maribank",
+    "philippines"
+  ],
+  "homepage": "https://github.com/djlemmor/dj-paykit-laravel",
+  "support": {
+    "issues": "https://github.com/djlemmor/dj-paykit-laravel/issues",
+    "source": "https://github.com/djlemmor/dj-paykit-laravel"
+  },
   "type": "library",
   "license": "MIT",
   "authors": [

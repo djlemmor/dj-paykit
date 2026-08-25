@@ -1,0 +1,10 @@
+# Composer installs dependencies here.
+# Dependencies should be installed by each consuming application.
+/vendor/
+
+# Reusable Composer libraries do not normally commit their lock file.
+/composer.lock
+
+# PHPUnit generates these temporary cache files.
+/.phpunit.cache/
+/.phpunit.result.cache
