@@ -28,6 +28,13 @@ final class DJPayKitServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        /*
+        * Loads package routes unless the host application's routes are cached.
+        */
+        $this->loadRoutesFrom(
+            __DIR__ . '/../routes/api.php',
+        );
+        
         if (! $this->app->runningInConsole()) {
             return;
         }
