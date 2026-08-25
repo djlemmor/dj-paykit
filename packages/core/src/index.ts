@@ -24,3 +24,6 @@ export type { PaymentMethod, PaymentMethodsResponse } from './types/payment-meth
 
 // Makes the widget configuration type available to npm users.
 export type { WidgetConfiguration } from './types/widget-config';
+
+// Exposes the API client for developers who want to load methods manually.
+export { fetchPaymentMethods, PaymentMethodsApiError } from './services/payment-methods-api';
