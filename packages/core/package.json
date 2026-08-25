@@ -2,6 +2,15 @@
   "name": "@djlemmor/djpaykit",
   "version": "0.1.0",
   "description": "Framework-independent QR payment widget for Philippine e-wallets.",
+  "homepage": "https://github.com/djlemmor/dj-paykit#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/djlemmor/dj-paykit.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/djlemmor/dj-paykit/issues"
+  },
   "type": "module",
   "files": [
     "dist"
