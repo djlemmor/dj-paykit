@@ -1,0 +1,8 @@
+# Ignores generated package builds.
+dist/
+
+# Ignores generated test reports.
+coverage/
+
+# Ignores installed dependencies.
+node_modules/

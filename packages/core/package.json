@@ -1,0 +1,57 @@
+{
+  "name": "@djlemmor/djpaykit",
+  "version": "0.1.0",
+  "description": "Framework-independent QR payment widget for Philippine e-wallets.",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/djpaykit.umd.cjs",
+  "module": "./dist/djpaykit.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/djpaykit.js",
+      "require": "./dist/djpaykit.umd.cjs"
+    }
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "keywords": [
+    "payments",
+    "qr-code",
+    "gcash",
+    "maya",
+    "maribank",
+    "philippines",
+    "web-component"
+  ],
+  "author": "DJ Lemmor Nuique",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.9.1",
+    "globals": "^17.11.0",
+    "jsdom": "^30.0.1",
+    "prettier": "^3.9.6",
+    "typescript": "~6.0.0",
+    "typescript-eslint": "^8.68.0",
+    "vite": "^8.2.2",
+    "vite-plugin-dts": "^5.0.3",
+    "vitest": "^4.1.11"
+  }
+}

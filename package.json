@@ -1,0 +1,27 @@
+{
+  "name": "djpaykit-monorepo",
+  "version": "0.1.0",
+  "description": "Reusable QR payment widget and Laravel adapter for Philippine e-wallets.",
+  "private": true,
+  "workspaces": [
+    "packages/core"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=@djlemmor/djpaykit",
+    "dev": "npm run dev --workspace=@djlemmor/djpaykit",
+    "test": "npm run test --workspace=@djlemmor/djpaykit",
+    "lint": "npm run lint --workspace=@djlemmor/djpaykit",
+    "format": "npm run format --workspace=@djlemmor/djpaykit"
+  },
+  "keywords": [
+    "payments",
+    "qr-code",
+    "gcash",
+    "maya",
+    "maribank",
+    "philippines",
+    "web-component"
+  ],
+  "author": "DJ Lemmor Nuique",
+  "license": "MIT"
+}
