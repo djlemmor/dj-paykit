@@ -26,3 +26,10 @@ vendor/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Composer lock files are normally not committed for reusable libraries.
+packages/laravel/composer.lock
+
+# Ignores PHPUnit's generated cache.
+.phpunit.cache/
+.phpunit.result.cache
