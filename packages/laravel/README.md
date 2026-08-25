@@ -366,6 +366,78 @@ GET     api/djpaykit/payment-methods
 GET     api/djpaykit/payment-methods/{paymentMethod}/qr
 ```
 
+## Frontend widget integration
+
+Install the core widget after it is published:
+
+```bash
+npm install @djlemmor/djpaykit
+```
+
+For local development:
+
+```bash
+# Installs the core package directly from the DJPayKit repository.
+npm install ../DJPayKit/packages/core
+```
+
+Register the custom element in the application's JavaScript entry:
+
+```javascript
+import { defineDJPayKitWidget } from "@djlemmor/djpaykit";
+
+/*
+ * Registers <djpaykit-widget> with the browser.
+ */
+defineDJPayKitWidget();
+```
+
+Example Laravel Blade integration:
+
+```blade
+{{-- Vite loads the JavaScript that registers the widget. --}}
+@vite('resources/js/app.js')
+
+<djpaykit-widget
+    api-url="{{ url('/api/djpaykit/payment-methods') }}"
+    order-reference="ORDER-1001"
+    amount="500.00"
+    currency="PHP"
+></djpaykit-widget>
+```
+
+The first enabled method is selected automatically. Selecting another
+provider updates its account details and QR without reloading the page.
+
+### Widget events
+
+The host checkout can observe provider selection:
+
+```javascript
+document.addEventListener("djpaykit:provider-selected", (event) => {
+  /*
+   * detail contains paymentMethodId and provider.
+   * It does not expose the account number.
+   */
+  console.log(event.detail);
+});
+```
+
+The host checkout can also observe successful QR downloads:
+
+```javascript
+document.addEventListener("djpaykit:qr-downloaded", (event) => {
+  /*
+   * detail contains paymentMethodId and provider.
+   */
+  console.log(event.detail);
+});
+```
+
+For the simplest integration, serve the Laravel API and widget from the
+same origin. Cross-origin integrations require the host application's
+CORS configuration to allow the checkout website.
+
 ## Package development
 
 Install dependencies:
