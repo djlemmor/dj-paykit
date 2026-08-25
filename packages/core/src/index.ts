@@ -21,3 +21,6 @@ export { PAYMENT_PROVIDERS, getPaymentProvider } from './providers/payment-provi
 export { PROVIDER_IDS, type PaymentProviderDefinition, type ProviderId } from './types/provider';
 
 export type { PaymentMethod, PaymentMethodsResponse } from './types/payment-method';
+
+// Makes the widget configuration type available to npm users.
+export type { WidgetConfiguration } from './types/widget-config';
