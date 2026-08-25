@@ -42,11 +42,12 @@ final class DJPayKitServiceProvider extends ServiceProvider
         ], 'djpaykit-config');
 
         /*
-         * Allows package migrations to be published before running them.
-         */
-        $this->publishes([
-            __DIR__ . '/../database/migrations' =>
-                database_path('migrations'),
-        ], 'djpaykit-migrations');
+ * Publishes migrations with installation-time timestamps so they run
+ * in the correct order inside the host Laravel application.
+ */
+$this->publishesMigrations([
+    __DIR__ . '/../database/migrations' =>
+        database_path('migrations'),
+], 'djpaykit-migrations');
     }
 }

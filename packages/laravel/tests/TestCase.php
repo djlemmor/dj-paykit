@@ -20,4 +20,14 @@ abstract class TestCase extends OrchestraTestCase
             DJPayKitServiceProvider::class,
         ];
     }
+
+    /**
+ * Runs DJPayKit migrations inside the in-memory test database.
+ */
+protected function defineDatabaseMigrations(): void
+{
+    $this->loadMigrationsFrom(
+        __DIR__ . '/../database/migrations',
+    );
+}
 }
