@@ -18,6 +18,33 @@ use Throwable;
 final class PaymentMethodController
 {
     /**
+     * Lists payment methods for the administrator interface.
+     */
+    public function index(): JsonResponse
+    {
+        /*
+        * Disabled methods remain visible to administrators so they can
+        * be edited or enabled again.
+        */
+        $paymentMethods = PaymentMethod::query()
+            ->orderBy('sort_order')
+            ->orderBy('provider')
+            ->get();
+
+        $data = $paymentMethods
+            ->map(
+                fn (PaymentMethod $paymentMethod): array =>
+                    $this->paymentMethodData($paymentMethod),
+            )
+            ->values()
+            ->all();
+
+        return new JsonResponse([
+            'data' => $data,
+        ]);
+    }
+
+    /**
      * Creates a payment method and stores its QR image.
      */
     public function store(
@@ -238,7 +265,7 @@ final class PaymentMethodController
     }
 
     /**
-     * Creates the administrator JSON representation.
+     * Creates a response containing one administrator payment method.
      */
     private function paymentMethodResponse(
         PaymentMethod $paymentMethod,
@@ -246,30 +273,53 @@ final class PaymentMethodController
     ): JsonResponse {
         return new JsonResponse(
             [
-                'data' => [
-                    'id' => (string) $paymentMethod->id,
-                    'provider' => $paymentMethod->provider,
-                    'displayName' =>
-                        $paymentMethod->display_name,
-                    'accountName' =>
-                        $paymentMethod->account_name,
-                    'accountNumber' =>
-                        $paymentMethod->account_number,
-                    'instructions' =>
-                        $paymentMethod->instructions,
-                    'showAccountNumber' =>
-                        $paymentMethod->show_account_number,
-                    'isEnabled' =>
-                        $paymentMethod->is_enabled,
-                    'sortOrder' =>
-                        $paymentMethod->sort_order,
-
-                    // Private filesystem paths are never returned.
-                    'hasQrImage' => true,
-                ],
+                'data' => $this->paymentMethodData(
+                    $paymentMethod,
+                ),
             ],
             $status,
         );
+    }
+
+    /**
+     * Creates the administrator representation of a payment method.
+     *
+     * @return array<string, mixed>
+     */
+    private function paymentMethodData(
+        PaymentMethod $paymentMethod,
+    ): array {
+        return [
+            'id' => (string) $paymentMethod->id,
+            'provider' => $paymentMethod->provider,
+            'displayName' =>
+                $paymentMethod->display_name,
+            'accountName' =>
+                $paymentMethod->account_name,
+
+            /*
+            * Administrators may see the configured number even when it is
+            * hidden from the public widget.
+            */
+            'accountNumber' =>
+                $paymentMethod->account_number,
+
+            'instructions' =>
+                $paymentMethod->instructions,
+            'showAccountNumber' =>
+                $paymentMethod->show_account_number,
+            'isEnabled' =>
+                $paymentMethod->is_enabled,
+            'sortOrder' =>
+                $paymentMethod->sort_order,
+            'hasQrImage' => true,
+            'createdAt' =>
+                $paymentMethod->created_at?->toISOString(),
+            'updatedAt' =>
+                $paymentMethod->updated_at?->toISOString(),
+
+            // qr_image_path is intentionally excluded.
+        ];
     }
 
     /**

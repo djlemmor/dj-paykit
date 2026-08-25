@@ -27,6 +27,91 @@ final class AdminPaymentMethodManagementTest extends TestCase
         $this->withoutMiddleware();
     }
 
+    public function test_an_administrator_can_list_payment_methods(): void
+    {
+        PaymentMethod::query()->create([
+            'provider' => 'maya',
+            'display_name' => 'Maya',
+            'account_name' => 'DJ Business',
+            'account_number' => '0912 345 6789',
+            'qr_image_path' =>
+                'djpaykit/qr-codes/maya/maya.png',
+            'show_account_number' => false,
+            'is_enabled' => false,
+            'sort_order' => 20,
+        ]);
+
+        PaymentMethod::query()->create([
+            'provider' => 'gcash',
+            'display_name' => 'GCash',
+            'account_name' => 'DJ Business',
+            'account_number' => '0999 111 2222',
+            'qr_image_path' =>
+                'djpaykit/qr-codes/gcash/gcash.png',
+            'show_account_number' => true,
+            'is_enabled' => true,
+            'sort_order' => 10,
+        ]);
+
+        $deleted = PaymentMethod::query()->create([
+            'provider' => 'maribank',
+            'display_name' => 'MariBank',
+            'account_name' => 'Deleted Business',
+            'qr_image_path' =>
+                'djpaykit/qr-codes/maribank/deleted.png',
+            'sort_order' => 5,
+        ]);
+
+        $deleted->delete();
+
+        $response = $this->getJson(
+            '/api/djpaykit/admin/payment-methods',
+        );
+
+        $response->assertOk();
+
+        $data = $response->json('data');
+
+        $this->assertIsArray($data);
+
+        // Soft-deleted methods are excluded.
+        $this->assertCount(2, $data);
+
+        // The configured display order is respected.
+        $this->assertSame(
+            'gcash',
+            $data[0]['provider'],
+        );
+
+        $this->assertSame(
+            'maya',
+            $data[1]['provider'],
+        );
+
+        /*
+        * Administrators can see Maya's account number even though its
+        * public show_account_number setting is disabled.
+        */
+        $this->assertSame(
+            '0912 345 6789',
+            $data[1]['accountNumber'],
+        );
+
+        $this->assertFalse(
+            $data[1]['showAccountNumber'],
+        );
+
+        $this->assertFalse(
+            $data[1]['isEnabled'],
+        );
+
+        // Private filesystem paths must never be returned.
+        $this->assertArrayNotHasKey(
+            'qrImagePath',
+            $data[0],
+        );
+    }
+
     public function test_an_administrator_can_update_payment_details(): void
     {
         $oldPath = 'djpaykit/qr-codes/gcash/original.png';

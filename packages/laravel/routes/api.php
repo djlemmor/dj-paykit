@@ -50,6 +50,16 @@ Route::prefix($prefix)->group(
          */
         Route::middleware($adminMiddleware)->group(
             function (): void {
+                Route::get(
+                    'admin/payment-methods',
+                    [
+                        AdminPaymentMethodController::class,
+                        'index',
+                    ],
+                )->name(
+                    'djpaykit.admin.payment-methods.index',
+                );
+                
                 Route::post(
                     'admin/payment-methods',
                     [
