@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace DJLemmor\DJPayKitLaravel;
 
+use DJLemmor\DJPayKitLaravel\Console\InstallCommand;
 use Illuminate\Support\ServiceProvider;
 
 final class DJPayKitServiceProvider extends ServiceProvider
@@ -38,6 +39,13 @@ final class DJPayKitServiceProvider extends ServiceProvider
         if (! $this->app->runningInConsole()) {
             return;
         }
+
+        /*
+        * Makes php artisan djpaykit:install available to host applications.
+        */
+        $this->commands([
+            InstallCommand::class,
+        ]);
 
         /*
          * Allows installation through:
